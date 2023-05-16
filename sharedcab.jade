@@ -1,0 +1,219 @@
+doctype html
+html
+  head
+    title Car Sharing
+    meta(charset='utf-8')
+    meta(name='viewport' content='width=device-width, initial-scale=1.0')
+    link(rel='stylesheet' href='https://unpkg.com/leaflet@1.8.0/dist/leaflet.css')
+    script(src='https://unpkg.com/leaflet@1.8.0/dist/leaflet.js')
+    style.
+      #map {
+      height: 800px;
+      width: 100%;
+      }
+      h1 {
+      font-size: 2.5rem;
+      margin-bottom: 20px;
+      }
+      .form-group {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      align-items: center;
+      }
+      label {
+      margin-right: 20px;
+      font-size: 1.2rem;
+      }
+      select {
+      padding: 5px;
+      font-size: 1rem;
+      }
+      button {
+      padding: 8px 12px;
+      font-size: 1rem;
+      color: white;
+      background-color: #2196f3;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      }
+      button:hover {
+      background-color: #0d47a1;
+      }
+      #map-container {
+      margin-top: 20px;
+      }
+  body
+    h1 Share your Cab
+    .form-group
+      label(for='destination') Choose Destination:
+      select#destination(name='destination')
+        option(value='')
+        option(value='Mannheim Hauptbahnhof') Mannheim Hauptbahnhof
+        option(value='Wasserturm Mannheim') Wasserturm Mannheim
+        option(value='Luisenpark') Luisenpark
+        option(value='SAP Arena') SAP Arena
+        option(value='Vogelstangsee') Vogelstangsee
+        option(value='Heidelberg Central Station') Heidelberg Central Station
+        option(value='Heidelberg Palace') Heidelberg Palace
+        option(value='SRH University Heidelberg') SRH University Heidelberg
+        option(value='Eppelheim') Eppelheim
+        option(value='Dossenheim') Dossenheim
+        option(value='Hockenheimring') Hockenheimring
+        option(value='Hockenheim Bahnhof') Hockenheim Bahnhof
+        option(value='Speyer Hauptbahnhof') Speyer Hauptbahnhof
+        option(value='Technic Museum Speyer') Technic Museum Speyer
+      //button#search Search
+      button#find-cab Find Cab
+    #map-container
+      #map
+
+    script.
+      var currentLocation = [];
+        //icon for user locations
+        var myLoc_icon = L.icon({
+          iconUrl: 'User.png',
+          iconSize: [40, 40], // size of the icon
+        });
+        //icon for all car locations
+        var CarLoc_icon = L.icon({
+          iconUrl: 'Car.png',
+          iconSize: [40, 40], // size of the icon
+        });
+        //icon for available car locations
+        var AvlblCar_icon = L.icon({
+          iconUrl: 'Avlbl_Cars.png',
+          iconSize: [40, 40], // size of the icon
+        });        
+
+        var map = L.map("map").setView([0, 0], 13);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+        }).addTo(map);
+
+        var previousMarker;
+        var previousCarMarker;
+        var newLocation;
+
+        //function to add marker to the map
+        function addMarker(location, message) {
+          if (previousMarker) {
+            previousMarker.remove();
+          }
+          previousMarker = L.marker(location, {icon: myLoc_icon, draggable: true })
+            .addTo(map)
+            .bindPopup(message)
+            .openPopup();
+          map.flyTo(location, 13);
+
+          previousMarker.on("dragend", function (e) {
+            delMarkers();
+            newLocation = e.target.getLatLng();
+            addMarker(newLocation, "You are here");
+            console.log(newLocation); // Live location values`
+
+            getCabs(newLocation);
+          });
+        }
+
+        function onLocationFound(e) {
+          addMarker(e.latlng, "Location1");
+        }
+
+        function onLocationError(e) {
+          console.log("Location access denied or unavailable");
+        }
+
+        map.on("locationfound", onLocationFound);
+        map.on("locationerror", onLocationError);
+
+        //User location from Browser
+        navigator.geolocation.getCurrentPosition(
+          function (position) {
+            var userLocation = [          position.coords.latitude,          position.coords.longitude,        ];
+            console.log(position);
+            addMarker(userLocation, "You are here"); //dragged location
+          },
+          function () {
+            console.log("Location access denied or unavailable");
+          }
+        );
+
+        //clear map before placing new markers
+        function delMarkers() {
+          map.eachLayer(function (layer) {
+            if (layer._latlng != null && layer.options.name != 'home')
+              map.removeLayer(layer);
+          });
+        }
+
+        //create POST request using user location are read cabs near to user position
+        function getCabs(location){
+          console.log('fetch ',location)
+          fetch('http://localhost:3000/sharedcab/live_location',{
+            method: 'POST',
+            body: JSON.stringify(location),
+            headers: {
+              'Content-type': 'application/json; charset=UTF-8',
+            }
+          }).then(function(response){ 
+            return response.json()})
+            .then(function(data)
+            {console.log(data)
+            if(data.length>0){
+              data.forEach(({Latitude, Longitude, Name}) => {
+                //addCarMarker(car)
+                marker = new L.Marker([Latitude, Longitude], {icon: CarLoc_icon});
+                marker.addTo(map);
+                marker.bindPopup(Name);
+              })
+            }
+            }).catch(error => console.error('Error:', error))
+        }
+
+        //Listener Event to read Destination and forwards to Endpoint
+        document.getElementById("find-cab").addEventListener("click", function () {
+          var user_destination = document.getElementById("destination").value;
+          console.log('fetch', user_destination);
+          console.log('location ',newLocation)
+
+          if (user_destination){
+            fetch('http://localhost:3000/sharedcab/get_destination', {
+              method : 'POST', 
+              body: JSON.stringify({user_destination,newLocation}), 
+              headers: {
+                'Content-type': 'application/json; charset=UTF-8',
+              }
+            }).then(function(response){
+              // Handle the response from the server here
+              return response.json()})
+            .then(function(data)
+            {console.log(data)
+            delMarkers()
+            addMarker(newLocation, "You are here");
+            if(data.length>0){
+              data.forEach(({Latitude, Longitude, Name,vacantSeats,CarDestination,Distance,CabType}) => {
+                //addCarMarker(car)
+                marker = new L.Marker([Latitude, Longitude], {icon: AvlblCar_icon});
+                marker.addTo(map);
+                marker.bindPopup('<strong>Cab ID:</strong>' + Name+ '</br>' + 
+                                '<strong>Cab Type:</strong>' + CabType+ '</br>' +
+                                '<strong>Available Seats:</strong>' +  vacantSeats+ '</br>' + 
+                                '<strong>Destination:</strong>'+CarDestination+ '</br>'+
+                                '<strong>Distance:</strong>'+Distance.toFixed(2)+' km'+'</br>'+
+                                '<strong>ETA:</strong>'+ Math.round(2*Distance)+ 'min' ).openPopup();
+              })
+            }
+            }).catch(error => {
+            // Handle any errors here
+            console.error(error);
+            });
+          }
+        });
+
+
+        
